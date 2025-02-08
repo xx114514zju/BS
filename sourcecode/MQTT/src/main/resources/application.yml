@@ -1,0 +1,41 @@
+server:
+  port: 8088
+spring:
+  application:
+    name: mqtt
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://8.130.114.14:3306/mqtt?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: xlsdb212
+    type: com.alibaba.druid.pool.DruidDataSource
+  web:
+    resources:
+      static-locations: classpath:/static/
+
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    aggressive-lazy-loading: true
+  global-config:
+    db-config:
+      id-type: ASSIGN_ID
+
+
+#mqtt配置
+mqtt:
+
+  #MQTT-服务器连接地址，如果有多个，用逗号隔开
+  #MQTT-连接服务器默认客户端ID
+  hostUrl: tcp://8.130.114.14:1883
+  keepAliveInterval: 60
+  connectionTimeout: 10
+  client-id: clinetID
+  server-id: serverID
+  data-topic: /+/data
+  will-topic: /will
+  will-content: willcontent
+  completion-timeout: 1500
+
