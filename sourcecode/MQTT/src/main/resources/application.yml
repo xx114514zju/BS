@@ -1,0 +1,54 @@
+server:
+  port: 8088
+spring:
+  redis:
+    host: localhost
+    port: 6379
+  application:
+    name: mqtt
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/mqtt?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: aa123456
+    type: com.alibaba.druid.pool.DruidDataSource
+  web:
+    resources:
+      static-locations: ""  # 清空默认路径（/static, /public等）
+      add-mappings: false   # 禁用所有静态资源映射
+  mail:
+    host: smtp.qq.com
+    port: 587
+    username: 1564549374@qq.com
+    password: sikgkbicvruebaba
+    properties:
+      mail:
+        smtp:
+          starttls:
+            enable: true
+            required: true
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    aggressive-lazy-loading: true
+  global-config:
+    db-config:
+      id-type: ASSIGN_ID
+#mqtt配置
+mqtt:
+  #MQTT-服务器连接地址，如果有多个，用逗号隔开
+  #MQTT-连接服务器默认客户端ID
+  hostUrl: tcp://localhost:1883
+  keepAliveInterval: 60
+  connectionTimeout: 10
+  client-id: clinetID
+  server-id: serverID
+  data-topic: /+/data
+  will-topic: /will
+  will-content: willcontent
+  completion-timeout: 1500
+
+jwt:
+  expiration: 86400000 # 单位为ms，1day
