@@ -1,5 +1,6 @@
 package com.zju.mqtt.controller;
 
+import com.zju.mqtt.Service.MessageQueueService;
 import com.zju.mqtt.entity.Message;
 import com.zju.mqtt.mapper.DeviceMapper;
 import com.zju.mqtt.mapper.MessageMapper;
@@ -8,12 +9,12 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.web.bind.annotation.*;
 
-import javax.servlet.ServletOutputStream;
-import javax.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestController
 @CrossOrigin
@@ -26,7 +27,8 @@ public class messageController {
     MessageMapper messageMapper;
     @Autowired
     DeviceMapper deviceMapper;
-
+    @Autowired
+    private MessageQueueService messageQueueService;
 
     @RequestMapping(value = "/mqtt", method = RequestMethod.POST)
     public String handleMqttRequest(@RequestBody Map<String, Object> requestBody) {
@@ -60,29 +62,32 @@ public class messageController {
             redisTemplate.opsForValue().set(deviceStatusCacheKey, isDeviceOnline, 10, TimeUnit.MINUTES);
         }
 
-        if ("connected".equals(option)) {
-            if (isDeviceOnline) {
-                return "设备已上线，不能重复接收上线请求";
-            }
-            handleConnection(device_id, true);
-            // 更新设备状态缓存
-            redisTemplate.opsForValue().set(deviceStatusCacheKey, true, 10, TimeUnit.MINUTES);
-        } else if ("disconnected".equals(option)) {
-            if (!isDeviceOnline) {
-                return "设备未上线，不能接收下线请求";
-            }
-            handleConnection(device_id, false);
-            // 更新设备状态缓存
-            redisTemplate.opsForValue().set(deviceStatusCacheKey, false, 10, TimeUnit.MINUTES);
-        } else if ("normal".equals(option)) {
-            if (!isDeviceOnline) {
-                return "设备未上线，不能接收消息";
-            }
-            handleMessage(device_id, longitude, latitude, info, alert);
-        } else {
-            return "无效的 option 参数值";
+        switch (option) {
+            case "connected":
+                if (isDeviceOnline) {
+                    return "设备已上线，不能重复接收上线请求";
+                }
+                handleConnection(device_id, true);
+                // 更新设备状态缓存
+                redisTemplate.opsForValue().set(deviceStatusCacheKey, true, 10, TimeUnit.MINUTES);
+                break;
+            case "disconnected":
+                if (!isDeviceOnline) {
+                    return "设备未上线，不能接收下线请求";
+                }
+                handleConnection(device_id, false);
+                // 更新设备状态缓存
+                redisTemplate.opsForValue().set(deviceStatusCacheKey, false, 10, TimeUnit.MINUTES);
+                break;
+            case "normal":
+                if (!isDeviceOnline) {
+                    return "设备未上线，不能接收消息";
+                }
+                handleMessage(device_id, longitude, latitude, info, alert);
+                break;
+            default:
+                return "无效的 option 参数值";
         }
-
         return "This is a response for /mqtt request";
     }
 
@@ -96,38 +101,44 @@ public class messageController {
     }
 
 
-    private static final String DEVICE_NAME_CACHE_PREFIX = "device_name:";
-    private static final int CACHE_EXPIRE_TIME = 60 * 60; // 缓存过期时间，单位：秒
-    @Async("asyncExecutor") // 假设你已经配置了名为 asyncExecutor 的线程池
-    public void handleMessage(Integer device_id, Double longitude, Double latitude, String info, Boolean alert) {
+    private static final Logger logger = LoggerFactory.getLogger(messageController.class);
+    // 缓存过期时间，单位：秒
+
+    @Async("asyncExecutor")
+    public void handleMessage(Integer device_id, Double longitude, Double latitude,
+                              String info, Boolean alert) {
         try {
+            // 1. 构造消息对象（原有逻辑）
             Message message = new Message();
             message.setDeviceId(device_id);
-            // 从缓存中获取设备名称
-            String deviceNameCacheKey = DEVICE_NAME_CACHE_PREFIX + device_id;
-            String deviceName = (String) redisTemplate.opsForValue().get(deviceNameCacheKey);
-            if (deviceName == null) {
-                deviceName = deviceMapper.GetDeviceName(device_id);
-                if (deviceName != null) {
-                    // 将设备名称存入缓存，并设置过期时间
-                    redisTemplate.opsForValue().set(deviceNameCacheKey, deviceName, CACHE_EXPIRE_TIME, TimeUnit.SECONDS);
-                }
-            }
-            message.setDeviceName(deviceName);
             message.setStamp(LocalDateTime.now());
             message.setLng(longitude);
             message.setLat(latitude);
             message.setInfo(info);
             message.setAlert(alert ? 1 : 0);
             message.setValue(new Random().nextInt());
-            messageMapper.insert(message);
+
+            // 2. 获取设备名称（带缓存逻辑）
+            String deviceNameCacheKey = "device_name:" + device_id;
+            String deviceName = (String) redisTemplate.opsForValue().get(deviceNameCacheKey);
+            if (deviceName == null) {
+                deviceName = deviceMapper.GetDeviceName(device_id);
+                redisTemplate.opsForValue().set(deviceNameCacheKey,
+                        deviceName != null ? deviceName : "NULL", 30, TimeUnit.SECONDS);
+            }
+            message.setDeviceName(deviceName);
+
+            // 3. 推送到Redis队列（新增逻辑）
+            messageQueueService.pushMessage(message);
+
+            // 4. 日志记录（可选）
+            logger.info("设备 {} 消息已加入队列，内容：{}", device_id, message);
+
         } catch (Exception e) {
-            // 处理异常，例如记录日志
-            e.printStackTrace();
+            // 5. 异常处理（重要）
+            logger.error("消息处理异常，设备ID：{}，错误信息：{}", device_id, e.getMessage());
         }
     }
-
-
 //    @RequestMapping(value = "/mqtt", method = RequestMethod.POST)
 //    public String handleMqttRequest(@RequestBody Map<String, Object> requestBody) {
 //        // 从请求体中获取参数

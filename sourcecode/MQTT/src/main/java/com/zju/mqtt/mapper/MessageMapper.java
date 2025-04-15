@@ -17,4 +17,6 @@ public interface MessageMapper extends BaseMapper<Message> {
 
     @Select("SELECT * FROM message WHERE device_id = #{id} ORDER BY stamp DESC LIMIT 10;")
     List<Message> getTimeOrder(@Param("id") Integer id);
+
+    void batchInsert(List<Message> messages);
 }
